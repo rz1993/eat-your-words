@@ -1,7 +1,8 @@
 import unittest
+import numpy as np
 import random
 
-from models import HiddenMarkovModel as HMM
+from models import HiddenMarkovModelTagger as HMM
 from probability import (FreqDist, ConditionalProbDist,
                          ConditionalFreqDist, MLEProbDist)
 
@@ -11,6 +12,7 @@ text = """I went to the store today so
         who tries too hard to be a badass though my
         brother""".split()
 states = ['NOUN', 'VERB', 'PREPOSITION', 'ADJ']
+vocab = list(set(text))
 tags = [random.choice(states) for w in text]
 tagged_text = [list(zip(text, tags))]
 
@@ -19,9 +21,9 @@ class CustomTestCase(unittest.TestCase):
     """ Wrapper over unittest.TestCase for custom functionalities """
     def assertAlmostOne(self, number, **kwargs):
         # For rounding errors
-        margin=10**4
-        return self.assertTrue(abs(number-1) < margin,
-            **kwargs)
+        margin=10**-4
+        error = kwargs.get('error', '{} is not close enough to one.'.format(number))
+        return self.assertTrue(abs(number-1) < margin, error)
 
 
 class TestProbability(CustomTestCase):
@@ -36,31 +38,41 @@ class TestProbability(CustomTestCase):
     def test_freq_dist(self):
         for tag in tags:
             total = self.cpd[tag].total()
-            self.assertTrue(total,
-                "Distribution for {} doesn't sum to one".format(tag))
+            self.assertAlmostOne(total,
+                error="Distribution for {} doesn't sum to one".format(tag))
 
 
-class TestHMM(unittest.TestCase):
+class TestHMM(CustomTestCase):
     @classmethod
     def setUp(cls):
         cls.model = HMM()
-        cls.model.fit(tagged_text)
+        cls.model.train(tagged_text)
 
-    def test_hmm_train(self):
+    def test_hmm_parameters_initialized(self):
         model = self.model
         for attr in ('_states', '_priors', '_symbols'):
             self.assertTrue(getattr(model, attr))
 
-        self.assertEquals(model._transition_matrix().shape,
-                          (len(states), len(states)))
-        for s in model._symbols:
-            self.assertEquals(len(model._emission_vectors(s)), len(states))
+    def test_hmm_transitions(self):
+        model = self.model
+        matrix = model._transition_matrix()
+        self.assertEqual(matrix.shape, (len(states), len(states)))
+
+        for i, s in enumerate(states):
+            trans_row = model._transitions[s]
+            self.assertAlmostOne(trans_row.total())
+            self.assertAlmostOne(np.sum(np.exp(matrix[i,:])))
 
     def test_hmm_emissions(self):
         model = self.model
-        for w in text:
-            print("Emission vector for {}".format(w))
-            print(model._emission_vectors(w))
+        for s in model._symbols:
+            self.assertEqual(len(model._emission_vectors(s)), len(states))
+
+        for i, s in enumerate(states):
+            emiss_row = model._emissions[s]
+            filtered = [t[0] for t in tagged_text[0] if t[1] == s]
+            self.assertAlmostOne(emiss_row.total())
+            self.assertEqual(emiss_row.freq_dist().N(), len(filtered))
 
     def test_hmm_forward_prob(self):
         # Will result in -inf's since not the text is not vocab dense

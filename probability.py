@@ -109,6 +109,7 @@ class MLEProbDist(ProbDist):
         return self._freq_dist
 
     def total(self):
+        # Keys are different for some reason
         total = 0.
         for k in self._freq_dist:
             total += self.prob(k)
