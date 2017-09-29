@@ -5,6 +5,8 @@ import random
 from models import HiddenMarkovModelTagger as HMM
 from probability import (FreqDist, ConditionalProbDist,
                          ConditionalFreqDist, MLEProbDist)
+from util import logsumexp, sumexp
+
 
 text = """I went to the store today so
         you can pretty much say I am a badass
@@ -48,6 +50,17 @@ class TestHMM(CustomTestCase):
         cls.model = HMM()
         cls.model.train(tagged_text)
 
+    def test_hmm_cache(self):
+        model = self.model
+        model._create_cache()
+        T, E, P, sym_map = model._cache
+        self.assertAlmostOne(sumexp(P))
+        self.assertEqual(set(sym_map.keys()),
+                         set(model._symbols))
+        for s in range(len(P)):
+            self.assertAlmostOne(sumexp(T[s, :]))
+            self.assertAlmostOne(sumexp(E[s, :]))
+
     def test_hmm_parameters_initialized(self):
         model = self.model
         for attr in ('_states', '_priors', '_symbols'):
@@ -61,7 +74,7 @@ class TestHMM(CustomTestCase):
         for i, s in enumerate(states):
             trans_row = model._transitions[s]
             self.assertAlmostOne(trans_row.total())
-            self.assertAlmostOne(np.sum(np.exp(matrix[i,:])))
+            self.assertAlmostOne(sumexp(matrix[i,:]))
 
     def test_hmm_emissions(self):
         model = self.model
@@ -83,9 +96,14 @@ class TestHMM(CustomTestCase):
         print("=========Testing Forward Algorithm=============")
         print(model.forward_prob(text))
 
-    def test_viterbi_algorithm(self):
+    def test_best_path_algorithm(self):
         model = self.model
-        print(model.viterbi(text))
+        print(model.best_path(text))
+
+    def test_hmm_random_sample(self):
+        model = self.model
+        t = 10
+        #print(model.random_sample(t))
 
 
 if __name__ == '__main__':
